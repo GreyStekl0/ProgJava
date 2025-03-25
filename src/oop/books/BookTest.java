@@ -1,8 +1,6 @@
 package oop.books;
 
-@SuppressWarnings("checkstyle:MissingJavadocType")
 public class BookTest {
-  @SuppressWarnings("checkstyle:MissingJavadocMethod")
   public static void main(String[] args) {
     Book book1 = new Book("Лев Толстой", "Война и мир", 1869);
     Book book2 = new Book("Федор Достоевский", "Преступление и наказание", 1866);

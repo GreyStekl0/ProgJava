@@ -2,13 +2,11 @@ package oop.books;
 
 import java.util.Objects;
 
-@SuppressWarnings("checkstyle:MissingJavadocType")
 public class Book {
   private String author;
   private String title;
   private int year;
 
-  @SuppressWarnings("checkstyle:MissingJavadocMethod")
   public Book(final String author, String title, int year) {
     this.author = author;
     this.title = title;
@@ -47,11 +45,11 @@ public class Book {
   public String toString() {
     return "Book{"
         +
-        "author='" + author + '\''
+        "author='" + author + "', "
         +
-        ", title='" + title + '\''
+        "title='" + title + "', "
         +
-        ", year=" + year
+        "year=" + year
         +
         '}';
   }
