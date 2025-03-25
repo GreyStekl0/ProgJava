@@ -21,11 +21,9 @@ public class Chair extends Furniture {
     return hasArmrests;
   }
 
-
   public boolean isAdjustable() {
     return isAdjustable;
   }
-
 
   @Override
   public void displayInfo() {
