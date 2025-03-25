@@ -3,8 +3,8 @@ package oop.shapes;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class ShapesDemo {
-  private static final Logger LOGGER = Logger.getLogger(ShapesDemo.class.getName());
+public class Main {
+  private static final Logger LOGGER = Logger.getLogger(Main.class.getName());
 
   public static void main(String[] args) {
     try {
