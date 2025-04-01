@@ -303,9 +303,6 @@ public class Library {
     Objects.requireNonNull(book, "Книга не может быть null");
 
     if (!catalog.contains(book)) {
-      // Книга может быть удалена после выдачи? Спорный момент.
-      // Если удаление возможно, то эта проверка не нужна.
-      // Если удаление невозможно, пока книга выдана (как реализовано в removeBook), то эта проверка уместна.
       throw new NoSuchElementException("Книга " + book.title() + " не найдена в общем каталоге.");
     }
 
@@ -318,7 +315,7 @@ public class Library {
       Iterator<Book> bookIterator = readerBooks.iterator();
       while (bookIterator.hasNext()) {
         Book issued = bookIterator.next();
-        if (issued.equals(book)) { // Сравнение по equals (ISBN)
+        if (issued.equals(book)) { // Сравнение по equals
           bookIterator.remove(); // Удаляем книгу из списка читателя
           foundAndReturned = true;
           System.out.println(
@@ -327,7 +324,6 @@ public class Library {
                   + "' возвращена читателем "
                   + entry.getKey().name()
           );
-          // Можно добавить логику уведомления следующего в очереди ожидания
           break; // Книга найдена и возвращена, выходим из внутреннего цикла
         }
       }
@@ -375,21 +371,37 @@ public class Library {
 
   /**
    * Добавление книги в приоритетную очередь ожидания.
-   *
+   * Логика добавления аналогична обычной очереди, но используется PriorityQueue.
    * @param book Книга.
-   * @throws NullPointerException   если book == null.
+   * @throws NullPointerException если book == null.
    * @throws NoSuchElementException если книги нет в каталоге.
+   * @throws IllegalStateException если книга доступна (нет смысла ставить в очередь).
    */
   public void addToPriorityWaitingList(Book book) {
     Objects.requireNonNull(book, "Книга не может быть null");
     if (!catalog.contains(book)) {
-      throw new NoSuchElementException("Книга " + book.title() + " не найдена в каталоге.");
+      throw new NoSuchElementException("Книга '" + book.title() + "' не найдена в каталоге.");
     }
-    // Логика проверки доступности и наличия в очереди аналогична обычной очереди
-    // ...
 
-    priorityWaitingQueue.offer(book); // Добавляем в PriorityQueue (сортировка по году)
-    System.out.println("Книга '" + book.title() + "' добавлена в приоритетную очередь.");
+    // Проверка доступности книги
+    if (isBookAvailable(book)) {
+      throw new IllegalStateException("Книга '" + book.title() + "' доступна и не может быть добавлена в очередь ожидания.");
+    }
+
+    // Проверка, не находится ли книга уже в этой очереди
+    if (priorityWaitingQueue.contains(book)) {
+      System.out.println("Предупреждение: Книга '" + book.title() + "' уже находится в приоритетной очереди ожидания.");
+      return; // Не добавляем дубликат
+    }
+
+    // Если все проверки пройдены, добавляем в PriorityQueue
+    if (priorityWaitingQueue.offer(book)) { // offer безопаснее add, возвращает false при неудаче
+      System.out.println("Книга '" + book.title() + "' добавлена в приоритетную очередь.");
+    } else {
+      // Эта ветка маловероятна для PriorityQueue при отсутствии ограничений по размеру,
+      // но для полноты обработки
+      System.err.println("Ошибка: Не удалось добавить книгу '" + book.title() + "' в приоритетную очередь.");
+    }
   }
 
   /**
@@ -415,7 +427,7 @@ public class Library {
    * @return Следующая книга или null, если очередь пуста.
    */
   public Book getNextBookFromPriorityQueue() {
-    // Извлекает и удаляет голову очереди (наименьший год)
+    // Извлекает и удаляет голову очереди
     Book nextBook = priorityWaitingQueue.poll();
     if (nextBook != null) {
       System.out.println("Следующая книга из приоритетной очереди: " + nextBook.title());
