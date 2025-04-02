@@ -1,5 +1,6 @@
 package collection;
 
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -9,137 +10,112 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 
 /**
- * Класс Library представляет библиотеку с каталогом книг, системой выдачи книг,
- * статистикой и очередями ожидания.
- *
- * <p>Реализует методы для работы с книгами, читателями и очередями.
+ * Основной класс библиотеки, управляющий каталогом, читателями и операциями.
+ * Stream API не используется.
  */
 public class Library {
 
-  // 1. Хранение каталога книг (отсортировано по автору по умолчанию)
-  private final SortedSet<Book> catalog = new TreeSet<>();
+  // --- Коллекции для хранения данных ---
+  private final TreeSet<Book> catalog = new TreeSet<>();
+  private final Map<Book, Reader> currentlyIssuedBooks = new HashMap<>();
+  private final Queue<Book> waitingList = new LinkedList<>();
+  private final PriorityQueue<Book> priorityWaitingList = new PriorityQueue<>(
+      Comparator.comparingInt(Book::getYear).reversed()
+  );
+  private final HashSet<String> uniqueAuthors = new HashSet<>();
+  private final ArrayList<Book> newArrivals = new ArrayList<>();
+  private final LinkedList<Book> issueHistory = new LinkedList<>();
+  private final Map<String, Reader> readers = new HashMap<>();
 
-  // 2. Система выдачи книг
-  private final Map<Reader, List<Book>> issuedBooks = new HashMap<>();
-  private final Queue<Book> waitingQueue = new LinkedList<>(); // Очередь на популярные книги (FIFO)
-  private final PriorityQueue<Book> priorityWaitingQueue = new PriorityQueue<>();
 
-  // 3. Статистика
-  private final Set<String> uniqueAuthors = new HashSet<>();
-  private final List<Book> newArrivals = new ArrayList<>(); // Временное хранение
-  private final List<Book> issueHistory = new LinkedList<>(); // История всех выдач (FIFO)
-
-  // Дополнительно: хранение читателей
-  private final Set<Reader> readers = new HashSet<>();
-
-  // --- 1. Базовые методы работы с книгами ---
+  // --- Базовые методы работы с книгами ---
 
   /**
-   * Добавление книги в каталог.
+   * Добавление книги в библиотеку.
    *
    * @param book Книга для добавления.
-   * @throws NullPointerException     если book == null.
-   * @throws IllegalArgumentException если книга с таким ISBN уже существует.
+   * @throws LibraryException если книга null или книга с таким ISBN уже существует.
    */
-  public void addBook(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
-
-    if (catalog.contains(book)) {
-      // TreeSet сам не добавит дубликат (основываясь на compareTo/equals),
-      // но для ясности можно добавить проверку или полагаться на возвращаемое значение add.
-      System.out.println(
-          "Предупреждение: Книга с ISBN "
-              + book.isbn()
-              + " уже существует в каталоге."
-      );
-      return; // Или выбросить исключение IllegalArgumentException
+  public void addBook(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Нельзя добавить null как книгу.");
+    }
+    // Проверка на уникальность по ISBN
+    boolean isbnExists = false;
+    for (Book existingBook : catalog) {
+      if (existingBook.getIsbn().equals(book.getIsbn())) {
+        isbnExists = true;
+        break;
+      }
     }
 
-    if (catalog.add(book)) { // Добавляем в каталог (TreeSet)
-      uniqueAuthors.add(book.author()); // Добавляем автора в HashSet (дубликаты игнорируются)
-      newArrivals.add(book); // Добавляем в список новых поступлений (ArrayList)
-      System.out.println(
-          "Книга добавлена: "
-              + book.title()
-      );
+    if (isbnExists) {
+      throw new LibraryException("Книга с ISBN " + book.getIsbn() + " уже существует в каталоге.");
+    }
+
+    if (catalog.add(book)) {
+      uniqueAuthors.add(book.getAuthor());
+      newArrivals.add(book);
+      book.setAvailable(true);
+    } else {
+      System.out.println("Предупреждение: Книга не добавлена, возможно дубликат по критерию сортировки TreeSet: " + book);
     }
   }
 
   /**
-   * Удаление книги из каталога.
+   * Удаление книги из библиотеки и обновление списка уникальных авторов (упрощенная проверка).
    *
    * @param book Книга для удаления.
-   * @throws NullPointerException   если book == null.
-   * @throws IllegalStateException  если книга выдана читателю.
-   * @throws NoSuchElementException если книга не найдена в каталоге.
+   * @throws LibraryException если книга null, не найдена, или выдана читателю.
    */
-  public void removeBook(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
-
-    if (!catalog.contains(book)) {
-      throw new NoSuchElementException(
-          "Книга "
-              + book.title()
-              + " не найдена в каталоге."
-      );
+  public void removeBook(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Нельзя удалить null.");
+    }
+    if (currentlyIssuedBooks.containsKey(book)) {
+      throw new LibraryException("Книга '" + book.getTitle() + "' (ISBN: " + book.getIsbn() + ") выдана читателю и не может быть удалена.");
     }
 
-    if (!isBookAvailable(book)) {
-      throw new IllegalStateException(
-          "Книга "
-              + book.title()
-              + " выдана читателю и не может быть удалена."
-      );
-    }
+    // Запоминаем автора ДО попытки удаления
+    String author = book.getAuthor();
 
-    // Удаляем из каталога
-    if (catalog.remove(book)) {
-      System.out.println(
-          "Книга удалена из каталога: "
-              + book.title()
-      );
+    // Пытаемся удалить книгу из основного каталога
+    boolean removed = catalog.remove(book);
 
-      // Удаляем из новых поступлений, если она там была
+    if (removed) {
+      // Если удаление из каталога успешно, удаляем из других мест
       newArrivals.remove(book);
+      waitingList.remove(book);
+      priorityWaitingList.remove(book);
 
-      // Удаляем из очередей ожидания
-      waitingQueue.remove(book);
-      priorityWaitingQueue.remove(book);
-
-      // Обновляем список уникальных авторов (удаляем автора, если книг его больше нет)
-      final String authorToRemove = book.author();
+      // Теперь проверяем, нужно ли удалять автора из uniqueAuthors
+      // Для этого ищем, есть ли ХОТЯ БЫ ОДНА другая книга этого автора в каталоге
       boolean authorHasOtherBooks = false;
-      for (Book value : catalog) {
-        if (value.author().equals(authorToRemove)) {
+      // Используем iterator для обхода оставшихся книг
+      for (Book remainingBook : catalog) {
+        if (remainingBook.getAuthor().equals(author)) {
+          // Нашли другую книгу того же автора
           authorHasOtherBooks = true;
-          break;
+          break; // Дальше можно не искать
         }
       }
 
+      // Если после удаления книги других книг автора не осталось, удаляем автора
       if (!authorHasOtherBooks) {
-        uniqueAuthors.remove(authorToRemove);
-        System.out.println(
-            "Автор "
-                + authorToRemove
-                + " удален из списка уникальных авторов."
-        );
+        uniqueAuthors.remove(author);
+        System.out.println("Автор '" + author + "' удален из списка уникальных авторов (последняя книга удалена).");
       }
+      System.out.println("Книга '" + book.getTitle() + "' успешно удалена из каталога.");
+
     } else {
-      // Эта ветка маловероятна из-за предварительной проверки contains, но для полноты
-      throw new NoSuchElementException(
-          "Не удалось удалить книгу "
-              + book.title()
-              + " (возможно, она была удалена параллельно)."
-      );
+      // Если удалить не удалось, значит книги не было в каталоге (по критерию TreeSet)
+      throw new LibraryException("Книга '" + book.getTitle() + "' (ISBN: " + book.getIsbn() + ") не найдена в каталоге для удаления.");
     }
   }
 
@@ -147,15 +123,17 @@ public class Library {
    * Поиск книг по автору.
    *
    * @param author Имя автора.
-   * @return Список книг данного автора.
-   * @throws NullPointerException если author == null.
+   * @return Список книг данного автора. Пустой список, если автор не найден или не указан.
    */
   public List<Book> findBooksByAuthor(String author) {
-    Objects.requireNonNull(author, "Имя автора не может быть null");
+    if (author == null || author.trim().isEmpty()) {
+      System.out.println("Имя автора для поиска не указано.");
+      return new ArrayList<>();
+    }
     List<Book> foundBooks = new ArrayList<>();
-    for (Book currentBook : catalog) {
-      if (currentBook.author().equalsIgnoreCase(author)) { // Поиск без учета регистра
-        foundBooks.add(currentBook);
+    for (Book book : catalog) {
+      if (book.getAuthor().equalsIgnoreCase(author.trim())) {
+        foundBooks.add(book);
       }
     }
     return foundBooks;
@@ -165,82 +143,78 @@ public class Library {
    * Поиск книг по году издания.
    *
    * @param year Год издания.
-   * @return Список книг данного года.
+   * @return Список книг, изданных в указанном году.
+   *
+   * <p>Пустой список, если год некорректен или если нет книг этого года.
    */
   public List<Book> findBooksByYear(int year) {
     if (year <= 0) {
-      throw new IllegalArgumentException("Год должен быть положительным числом.");
+      System.out.println("Год издания должен быть положительным числом.");
+      return new ArrayList<>();
     }
     List<Book> foundBooks = new ArrayList<>();
     for (Book book : catalog) {
-      if (book.year() == year) {
+      if (book.getYear() == year) {
         foundBooks.add(book);
+      }
+      // Оптимизация для сортированного по году TreeSet
+      if (book.getYear() > year && catalog.comparator() == null) {
+        break;
       }
     }
     return foundBooks;
   }
 
-  // --- 2. Методы работы с читателями ---
+  // --- Методы работы с читателями ---
 
   /**
-   * Добавление нового читателя.
+   * Добавление нового читателя в систему.
    *
    * @param reader Читатель для добавления.
-   * @return true, если читатель был добавлен, false, если он уже существует.
-   * @throws NullPointerException если reader == null.
+   * @throws LibraryException если читатель null или читатель с таким ID уже существует.
    */
-  public boolean addReader(Reader reader) {
-    Objects.requireNonNull(reader, "Читатель не может быть null");
-    if (readers.add(reader)) {
-      // Инициализируем список выданных книг для нового читателя
-      issuedBooks.put(reader, new ArrayList<>());
-      System.out.println("Читатель добавлен: " + reader.name());
-      return true;
-    } else {
-      System.out.println(
-          "Читатель "
-              + reader.name()
-              + " (ID: "
-              + reader.readerId()
-              + ") уже зарегистрирован."
-      );
-      return false;
+  public void addReader(Reader reader) throws LibraryException {
+    if (reader == null) {
+      throw new LibraryException("Нельзя добавить null как читателя.");
     }
+    if (readers.containsKey(reader.getReaderId())) {
+      throw new LibraryException("Читатель с ID " + reader.getReaderId() + " уже зарегистрирован.");
+    }
+    readers.put(reader.getReaderId(), reader);
   }
 
   /**
-   * Получение читателя по имени.
-   *
-   * @param name Имя читателя.
-   * @return Объект Reader или null, если читатель не найден.
-   * @throws NullPointerException если name == null.
-   */
-  public Reader getReader(String name) {
-    Objects.requireNonNull(name, "Имя читателя не может быть null");
-    for (Reader reader : readers) {
-      if (reader.name().equalsIgnoreCase(name)) {
-        return reader;
-      }
-    }
-    return null; // Возвращаем null, если не найден
-  }
-
-  /**
-   * Получение читателя по ID.
+   * Получение читателя по его ID.
    *
    * @param readerId ID читателя.
    * @return Объект Reader или null, если читатель не найден.
    */
-  public Reader getReaderById(int readerId) {
-    if (readerId <= 0) {
-      throw new IllegalArgumentException("ID читателя должен быть положительным.");
+  public Reader getReaderById(String readerId) {
+    if (readerId == null || readerId.trim().isEmpty()) {
+      System.out.println("ID читателя не указан.");
+      return null;
     }
-    for (Reader reader : readers) {
-      if (reader.readerId() == readerId) {
+    return readers.get(readerId);
+  }
+
+  /**
+   * Получение читателя по имени (возвращает первого найденного).
+   *
+   * @param name Имя читателя.
+   * @return Объект Reader или null, если читатель не найден.
+   */
+  public Reader getReader(String name) {
+    if (name == null || name.trim().isEmpty()) {
+      System.out.println("Имя читателя для поиска не указано.");
+      return null;
+    }
+    // Используем for-each для итерации по значениям Map
+    for (Reader reader : readers.values()) {
+      if (reader.getName().equalsIgnoreCase(name.trim())) {
         return reader;
       }
     }
-    return null; // Возвращаем null, если не найден
+    return null;
   }
 
 
@@ -249,384 +223,326 @@ public class Library {
    *
    * @param reader Читатель.
    * @param book   Книга для выдачи.
-   * @throws NullPointerException   если reader или book == null.
-   * @throws NoSuchElementException если книга или читатель не зарегистрированы в системе.
-   * @throws IllegalStateException  если книга уже выдана или недоступна.
+   * @throws LibraryException если читатель или книга null, не найдены, книга недоступна или у читателя лимит.
    */
-  public void issueBook(Reader reader, Book book) {
-    Objects.requireNonNull(reader, "Читатель не может быть null");
-    Objects.requireNonNull(book, "Книга не может быть null");
-
-    if (!readers.contains(reader)) {
-      throw new NoSuchElementException("Читатель " + reader.name() + " не зарегистрирован.");
+  public void issueBook(Reader reader, Book book) throws LibraryException {
+    if (reader == null || book == null) {
+      throw new LibraryException("Читатель и книга не должны быть null.");
+    }
+    if (!readers.containsKey(reader.getReaderId())) {
+      throw new LibraryException("Читатель " + reader.getName() + " не зарегистрирован в библиотеке.");
     }
     if (!catalog.contains(book)) {
-      throw new NoSuchElementException("Книга " + book.title() + " не найдена в каталоге.");
+      throw new LibraryException("Книга '" + book.getTitle() + "' отсутствует в каталоге.");
+    }
+    if (currentlyIssuedBooks.containsKey(book)) {
+      throw new LibraryException("Книга '" + book.getTitle() + "' уже выдана читателю " + currentlyIssuedBooks.get(book).getName());
+    }
+    if (!reader.canBorrowMore()) {
+      throw new LibraryException("Читатель " + reader.getName() + " достиг лимита книг (" + reader.getMaxBooks() + ").");
     }
 
-    if (!isBookAvailable(book)) {
-      throw new IllegalStateException(
-          "Книга "
-              + book.title()
-              + " недоступна для выдачи (возможно, уже выдана)."
-      );
+    if (reader.borrowBookInternal(book)) {
+      currentlyIssuedBooks.put(book, reader);
+      book.setAvailable(false);
+      issueHistory.add(book);
+      waitingList.remove(book);
+      priorityWaitingList.remove(book);
+      System.out.println("Книга '" + book.getTitle() + "' выдана читателю " + reader.getName());
+    } else {
+      throw new LibraryException("Не удалось выдать книгу '" + book.getTitle() + "' читателю " + reader.getName() + ".");
     }
-
-    // Выдаем книгу
-    List<Book> readerBooks = issuedBooks.get(reader); // Получаем список книг читателя из HashMap
-    if (readerBooks == null) {
-      // Этого не должно произойти, если addReader работает правильно, но для надежности
-      throw new IllegalStateException(
-          "Внутренняя ошибка: отсутствует запись о книгах для читателя "
-              + reader.name()
-      );
-    }
-    readerBooks.add(book); // Добавляем книгу в список читателя (ArrayList)
-    issueHistory.add(book); // Добавляем в общую историю выдач (LinkedList)
-
-    // Удаляем из очередей, если книга была там
-    waitingQueue.remove(book);
-    priorityWaitingQueue.remove(book);
-
-    System.out.println("Книга '" + book.title() + "' выдана читателю " + reader.name());
   }
 
   /**
-   * Возврат книги читателем.
+   * Возврат книги в библиотеку.
    *
    * @param book Книга для возврата.
-   * @throws NullPointerException   если book == null.
-   * @throws NoSuchElementException если книга не найдена в каталоге.
-   * @throws IllegalStateException  если книга не числится как выданная.
+   * @throws LibraryException если книга null или не была выдана.
    */
-  public void returnBook(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
-
-    if (!catalog.contains(book)) {
-      throw new NoSuchElementException("Книга " + book.title() + " не найдена в общем каталоге.");
+  public void returnBook(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Нельзя вернуть null как книгу.");
+    }
+    if (!currentlyIssuedBooks.containsKey(book)) {
+      throw new LibraryException("Книга '" + book.getTitle() + "' не числится как выданная.");
     }
 
-    boolean foundAndReturned = false;
-    // Используем итератор для безопасного удаления во время итерации по записям Map
-    for (Map.Entry<Reader, List<Book>> entry : issuedBooks.entrySet()) {
-      List<Book> readerBooks = entry.getValue();
-
-      // Используем итератор для списка книг читателя для безопасного удаления
-      Iterator<Book> bookIterator = readerBooks.iterator();
-      while (bookIterator.hasNext()) {
-        Book issued = bookIterator.next();
-        if (issued.equals(book)) { // Сравнение по equals
-          bookIterator.remove(); // Удаляем книгу из списка читателя
-          foundAndReturned = true;
-          System.out.println(
-              "Книга '"
-                  + book.title()
-                  + "' возвращена читателем "
-                  + entry.getKey().name()
-          );
-          break; // Книга найдена и возвращена, выходим из внутреннего цикла
-        }
-      }
-      if (foundAndReturned) {
-        break; // Выходим из внешнего цикла
-      }
-    }
-
-    if (!foundAndReturned) {
-      throw new IllegalStateException("Книга '" + book.title() + "' не числится как выданная.");
+    Reader reader = currentlyIssuedBooks.get(book);
+    if (reader.returnBookInternal(book)) {
+      currentlyIssuedBooks.remove(book);
+      book.setAvailable(true);
+      System.out.println("Книга '" + book.getTitle() + "' возвращена читателем " + reader.getName());
+      checkWaitingListAndNotify(book);
+    } else {
+      throw new LibraryException("Ошибка целостности данных: книга '" + book.getTitle() + "' числилась выданной, но не найдена у читателя " + reader.getName());
     }
   }
 
-  // --- 3. Методы работы с очередью ---
+  // Вспомогательный метод для проверки очереди после возврата
+  private void checkWaitingListAndNotify(Book returnedBook) {
+    if (priorityWaitingList.contains(returnedBook)) {
+      System.out.println("Книга '" + returnedBook.getTitle() + "' есть в приоритетной очереди ожидания.");
+    } else if (waitingList.contains(returnedBook)) {
+      System.out.println("Книга '" + returnedBook.getTitle() + "' есть в обычной очереди ожидания.");
+    }
+  }
+
+
+  // --- Методы работы с очередью ---
 
   /**
    * Добавление книги в обычную очередь ожидания.
    *
-   * @param book Книга.
-   * @throws NullPointerException   если book == null.
-   * @throws NoSuchElementException если книги нет в каталоге.
-   * @throws IllegalStateException  если книга доступна (нет смысла ставить в очередь).
+   * @param book Книга для добавления в очередь.
+   * @throws LibraryException если книга null, не существует или доступна.
    */
-  public void addToWaitingList(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
+  public void addToWaitingList(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Книга не должна быть null.");
+    }
     if (!catalog.contains(book)) {
-      throw new NoSuchElementException("Книга " + book.title() + " не найдена в каталоге.");
+      throw new LibraryException("Книга не найдена в каталоге.");
     }
-    if (isBookAvailable(book)) {
-      System.out.println(
-          "Книга '"
-              + book.title()
-              + "' доступна и не требует добавления в очередь."
-      );
-      return; // Или выбросить IllegalStateException
+    if (!currentlyIssuedBooks.containsKey(book)) {
+      System.out.println("Предупреждение: Книга '" + book.getTitle() + "' доступна, добавление в очередь ожидания не имеет смысла.");
     }
-    if (waitingQueue.contains(book)) {
-      System.out.println("Книга '" + book.title() + "' уже находится в очереди ожидания.");
-      return;
-    }
-
-    waitingQueue.offer(book); // Добавляем в конец очереди (LinkedList как Queue)
-    System.out.println("Книга '" + book.title() + "' добавлена в очередь ожидания.");
+    waitingList.offer(book);
+    System.out.println("Книга '" + book.getTitle() + "' добавлена в очередь ожидания.");
   }
 
   /**
    * Добавление книги в приоритетную очередь ожидания.
-   * Логика добавления аналогична обычной очереди, но используется PriorityQueue.
-   * @param book Книга.
-   * @throws NullPointerException если book == null.
-   * @throws NoSuchElementException если книги нет в каталоге.
-   * @throws IllegalStateException если книга доступна (нет смысла ставить в очередь).
+   *
+   * @param book Книга для добавления в очередь.
+   * @throws LibraryException если книга null, не существует или доступна.
    */
-  public void addToPriorityWaitingList(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
+  public void addToPriorityWaitingList(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Книга не должна быть null.");
+    }
     if (!catalog.contains(book)) {
-      throw new NoSuchElementException("Книга '" + book.title() + "' не найдена в каталоге.");
+      throw new LibraryException("Книга не найдена в каталоге.");
     }
-
-    // Проверка доступности книги
-    if (isBookAvailable(book)) {
-      throw new IllegalStateException("Книга '" + book.title() + "' доступна и не может быть добавлена в очередь ожидания.");
+    if (!currentlyIssuedBooks.containsKey(book)) {
+      System.out.println("Предупреждение: Книга '" + book.getTitle() + "' доступна, добавление в приоритетную очередь не имеет смысла.");
     }
-
-    // Проверка, не находится ли книга уже в этой очереди
-    if (priorityWaitingQueue.contains(book)) {
-      System.out.println("Предупреждение: Книга '" + book.title() + "' уже находится в приоритетной очереди ожидания.");
-      return; // Не добавляем дубликат
-    }
-
-    // Если все проверки пройдены, добавляем в PriorityQueue
-    if (priorityWaitingQueue.offer(book)) { // offer безопаснее add, возвращает false при неудаче
-      System.out.println("Книга '" + book.title() + "' добавлена в приоритетную очередь.");
-    } else {
-      // Эта ветка маловероятна для PriorityQueue при отсутствии ограничений по размеру,
-      // но для полноты обработки
-      System.err.println("Ошибка: Не удалось добавить книгу '" + book.title() + "' в приоритетную очередь.");
-    }
+    priorityWaitingList.offer(book);
+    System.out.println("Книга '" + book.getTitle() + "' добавлена в приоритетную очередь ожидания.");
   }
 
+
   /**
-   * Получение следующей книги из обычной очереди ожидания (FIFO).
-   * Книга удаляется из очереди.
+   * Получение (и удаление) следующей книги из обычной очереди ожидания (FIFO).
    *
-   * @return Следующая книга или null, если очередь пуста.
+   * @return Следующая книга из очереди или null, если очередь пуста.
    */
   public Book getNextBookFromQueue() {
-    Book nextBook = waitingQueue.poll(); // Извлекает и удаляет голову очереди
-    if (nextBook != null) {
-      System.out.println("Следующая книга из очереди: " + nextBook.title());
-    } else {
+    if (waitingList.isEmpty()) {
       System.out.println("Обычная очередь ожидания пуста.");
+      return null;
     }
-    return nextBook;
+    return waitingList.poll();
   }
 
   /**
-   * Получение следующей книги из приоритетной очереди ожидания.
-   * Книга удаляется из очереди.
+   * Получение (и удаление) следующей книги из приоритетной очереди ожидания.
    *
-   * @return Следующая книга или null, если очередь пуста.
+   * @return Следующая книга из очереди (с наивысшим приоритетом) или null, если очередь пуста.
    */
   public Book getNextBookFromPriorityQueue() {
-    // Извлекает и удаляет голову очереди
-    Book nextBook = priorityWaitingQueue.poll();
-    if (nextBook != null) {
-      System.out.println("Следующая книга из приоритетной очереди: " + nextBook.title());
-    } else {
+    if (priorityWaitingList.isEmpty()) {
       System.out.println("Приоритетная очередь ожидания пуста.");
+      return null;
     }
-    return nextBook;
+    return priorityWaitingList.poll();
   }
 
-
   /**
-   * Проверка наличия книги в обычной очереди ожидания.
+   * Проверка наличия конкретной книги в обычной очереди ожидания.
    *
    * @param book Книга для проверки.
-   * @return true, если книга в очереди, иначе false.
-   * @throws NullPointerException если book == null.
+   * @return true, если книга есть в очереди.
+   * @throws LibraryException если книга null.
    */
-  public boolean isBookInQueue(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
-    return waitingQueue.contains(book); // Проверка наличия в LinkedList (Queue)
+  public boolean isBookInQueue(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Книга не должна быть null.");
+    }
+    return waitingList.contains(book);
   }
 
   /**
-   * Проверка наличия книги в приоритетной очереди ожидания.
+   * Проверка наличия конкретной книги в приоритетной очереди ожидания.
    *
    * @param book Книга для проверки.
-   * @return true, если книга в очереди, иначе false.
-   * @throws NullPointerException если book == null.
+   * @return true, если книга есть в очереди.
+   * @throws LibraryException если книга null.
    */
-  public boolean isBookInPriorityQueue(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
-    return priorityWaitingQueue.contains(book); // Проверка наличия в PriorityQueue
+  public boolean isBookInPriorityQueue(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Книга не должна быть null.");
+    }
+    return priorityWaitingList.contains(book);
   }
 
-  // --- 4. Методы статистики ---
+  // --- Методы статистики ---
 
   /**
-   * Получение множества уникальных авторов в библиотеке.
+   * Получение множества уникальных авторов всех книг в каталоге.
    *
-   * @return Неизменяемое множество имен авторов.
+   * @return Копию множества уникальных имен авторов.
    */
   public Set<String> getUniqueAuthors() {
-    // Возвращаем копию или неизменяемое представление для защиты внутреннего состояния
-    return Collections.unmodifiableSet(uniqueAuthors);
-    // или return new HashSet<>(uniqueAuthors);
+    return new HashSet<>(uniqueAuthors);
   }
 
   /**
-   * Получение "популярных" книг (в данном случае - книги в обычной очереди ожидания).
+   * Получение "популярных" книг (находящиеся в очередях ожидания).
    *
-   * @return Список книг в очереди ожидания.
+   * @return Список популярных книг (копия).
    */
   public List<Book> getPopularBooks() {
-    // Возвращаем копию, т.к. очередь может изменяться
-    return new ArrayList<>(waitingQueue);
+    Set<Book> popular = new HashSet<>(waitingList);
+    popular.addAll(priorityWaitingList);
+    return new ArrayList<>(popular);
   }
 
   /**
-   * Получение статистики по выданным книгам.
+   * Статистика по выданным книгам: какой читатель какие книги взял.
    *
-   * @return Неизменяемое представление карты <Читатель, Список его книг>
+   * @return Копия карты, где ключ - читатель, значение - список взятых им книг.
    */
   public Map<Reader, List<Book>> getIssuedBooksStats() {
-    // Возвращаем неизменяемое представление для защиты
-    return Collections.unmodifiableMap(issuedBooks);
+    Map<Reader, List<Book>> stats = new HashMap<>();
+    // Итерация по карте выданных книг (книга -> читатель)
+    for (Map.Entry<Book, Reader> entry : currentlyIssuedBooks.entrySet()) {
+      Book book = entry.getKey();
+      Reader reader = entry.getValue();
+      // Получаем список книг для данного читателя или создаем новый, если его еще нет
+      List<Book> readerBooks = stats.get(reader);
+      if (readerBooks == null) {
+        readerBooks = new ArrayList<>();
+        stats.put(reader, readerBooks);
+      }
+      readerBooks.add(book);
+    }
+    return new HashMap<>(stats);
   }
 
   /**
    * Получение общего количества книг в каталоге библиотеки.
    *
-   * @return Количество книг.
+   * @return Общее количество книг.
    */
   public int getTotalBooksCount() {
     return catalog.size();
   }
 
-  // --- 5. Методы сортировки и фильтрации ---
+  // --- Методы сортировки и фильтрации ---
 
   /**
-   * Получение списка книг, отсортированных по году издания (естественный порядок TreeSet).
+   * Получение списка всех книг, отсортированных по году издания (естественный порядок TreeSet).
    *
    * @return Новый список книг, отсортированный по году.
    */
   public List<Book> sortByYear() {
-    // TreeSet уже отсортирован, просто копируем в список
     return new ArrayList<>(catalog);
   }
 
   /**
-   * Получение списка книг, отсортированных по автору (затем по названию).
+   * Получение списка всех книг, отсортированных по автору (и затем по названию).
    *
    * @return Новый список книг, отсортированный по автору.
    */
   public List<Book> sortByAuthor() {
     List<Book> sortedList = new ArrayList<>(catalog);
-    // Используем Comparator для сортировки по автору, затем по названию
-    sortedList.sort(Comparator.comparing(Book::author)
-        .thenComparing(Book::title));
+    sortedList.sort(Comparator.comparing(Book::getAuthor)
+        .thenComparing(Book::getTitle));
     return sortedList;
   }
 
   /**
-   * Получение списка доступных для выдачи книг.
+   * Получение списка только доступных для выдачи книг.
+   * Книги в списке отсортированы по году (естественный порядок каталога).
    *
    * @return Список доступных книг.
    */
   public List<Book> filterAvailableBooks() {
     List<Book> availableBooks = new ArrayList<>();
-    // Итерация по каталогу
     for (Book book : catalog) {
-      if (isBookAvailable(book)) {
+      if (!currentlyIssuedBooks.containsKey(book)) { // Проверка доступности
         availableBooks.add(book);
       }
     }
     return availableBooks;
   }
 
-  // --- 6. Вспомогательные методы ---
+  // --- Вспомогательные методы ---
 
   /**
-   * Проверка доступности книги для выдачи.
+   * Проверка доступности конкретной книги.
    *
    * @param book Книга для проверки.
-   * @return true, если книга есть в каталоге и не выдана никому, иначе false.
-   * @throws NullPointerException если book == null.
+   * @return true, если книга есть в каталоге и не выдана.
+   * @throws LibraryException если книга null.
    */
-  public boolean isBookAvailable(Book book) {
-    Objects.requireNonNull(book, "Книга не может быть null");
-
-    if (!catalog.contains(book)) {
-      return false; // Книги нет в библиотеке
+  public boolean isBookAvailable(Book book) throws LibraryException {
+    if (book == null) {
+      throw new LibraryException("Книга для проверки доступности не должна быть null.");
     }
-
-    // Проверяем, не выдана ли книга кому-либо
-    // Итерация по значениям (спискам книг) в карте issuedBooks
-    for (List<Book> issuedList : issuedBooks.values()) {
-      // Используем итератор для обхода списка выданных книг
-      for (Book value : issuedList) {
-        if (value.equals(book)) { // Сравнение по equals (ISBN)
-          return false; // Найдена в списке выданных
-        }
-      }
-    }
-
-    return true; // Книга есть в каталоге и не найдена в выданных
+    return catalog.contains(book) && !currentlyIssuedBooks.containsKey(book);
   }
 
   /**
-   * Получение списка новых поступлений (книг, добавленных с момента создания библиотеки или последнего вызова?).
-   * В данной реализации возвращает все книги, добавленные через addBook.
+   * Получение списка новых поступлений.
    *
-   * @return Копия списка новых поступлений.
+   * @return Неизменяемый список новых поступлений.
    */
   public List<Book> getNewArrivals() {
-    // Возвращаем копию, чтобы внешние изменения не влияли на внутренний список
-    return new ArrayList<>(newArrivals);
+    return Collections.unmodifiableList(newArrivals);
   }
 
   /**
-   * Получение истории всех выдач книг.
+   * Получение истории выдач.
    *
-   * @return Копия истории выдач (LinkedList).
+   * @return Неизменяемый связный список истории выдач.
    */
   public List<Book> getIssueHistory() {
-    // Возвращаем копию
-    return new LinkedList<>(issueHistory);
+    return Collections.unmodifiableList(issueHistory);
   }
 
   /**
-   * Вывод каталога книг в консоль (отсортированного по году).
+   * Вывод каталога книг в консоль (отсортировано по году).
+   * Использует итератор.
    */
   public void printCatalog() {
-    System.out.println("\n--- Каталог Библиотеки (" + getTotalBooksCount() + " книг) ---");
+    System.out.println("\n--- Каталог Библиотеки (" + getTotalBooksCount() + " книг, отсортировано по году) ---");
     if (catalog.isEmpty()) {
       System.out.println("Каталог пуст.");
       return;
     }
-    // Используем итератор для вывода
     Iterator<Book> iterator = catalog.iterator();
     int count = 1;
     while (iterator.hasNext()) {
       System.out.println(count++ + ". " + iterator.next());
     }
-    System.out.println("------------------------------------");
+    System.out.println("--------------------------------------------------");
   }
 
   /**
-   * Вывод списка читателей.
+   * Вывод доступных книг в консоль.
    */
-  public void printReaders() {
-    System.out.println("\n--- Список Читателей (" + readers.size() + ") ---");
-    if (readers.isEmpty()) {
-      System.out.println("Читатели не зарегистрированы.");
+  public void printAvailableBooks() {
+    List<Book> available = filterAvailableBooks();
+    System.out.println("\n--- Доступные книги (" + available.size() + ") ---");
+    if (available.isEmpty()) {
+      System.out.println("Нет доступных книг.");
       return;
     }
     int count = 1;
-    // Используем итератор для HashSet
-    for (Reader reader : readers) {
-      System.out.println(count++ + ". " + reader);
+    for (Book book : available) {
+      System.out.println(count++ + ". " + book);
     }
     System.out.println("-----------------------------");
   }
@@ -635,25 +551,38 @@ public class Library {
    * Вывод статистики по выданным книгам.
    */
   public void printIssuedBooksStats() {
-    System.out.println("\n--- Статистика Выданных Книг ---");
-    if (issuedBooks.isEmpty() || issuedBooks.values().stream().allMatch(List::isEmpty)) {
+    Map<Reader, List<Book>> stats = getIssuedBooksStats();
+    System.out.println("\n--- Статистика по выданным книгам (" + currentlyIssuedBooks.size() + " книг выдано) ---");
+    if (stats.isEmpty()) {
       System.out.println("Ни одна книга не выдана.");
       return;
     }
-    // Итерация по записям карты
-    for (Map.Entry<Reader, List<Book>> entry : issuedBooks.entrySet()) {
+    for (Map.Entry<Reader, List<Book>> entry : stats.entrySet()) {
       Reader reader = entry.getKey();
       List<Book> books = entry.getValue();
-      if (!books.isEmpty()) {
-        System.out.println("Читатель: " + reader.name() + " (ID: " + reader.readerId() + ")");
-        // Итерация по списку книг читателя
-        Iterator<Book> bookIterator = books.iterator();
-        int bookCount = 1;
-        while (bookIterator.hasNext()) {
-          System.out.println("  " + bookCount++ + ") " + bookIterator.next());
-        }
+      System.out.println("Читатель: " + reader.getName() + " (ID: " + reader.getReaderId() + ")");
+      int count = 1;
+      for (Book book : books) {
+        System.out.println("  " + count++ + ") " + book.getTitle() + " (" + book.getAuthor() + ", " + book.getYear() + ")");
       }
     }
-    System.out.println("---------------------------------");
+    System.out.println("---------------------------------------------");
+  }
+
+  /**
+   * Вывод уникальных авторов.
+   */
+  public void printUniqueAuthors() {
+    Set<String> authors = getUniqueAuthors();
+    System.out.println("\n--- Уникальные авторы (" + authors.size() + ") ---");
+    if (authors.isEmpty()) {
+      System.out.println("Нет авторов в каталоге.");
+      return;
+    }
+    int count = 1;
+    for (String author : authors) {
+      System.out.println(count++ + ". " + author);
+    }
+    System.out.println("------------------------------");
   }
 }
