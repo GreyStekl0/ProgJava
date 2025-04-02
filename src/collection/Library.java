@@ -1,6 +1,5 @@
 package collection;
 
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -17,7 +16,6 @@ import java.util.TreeSet;
 
 /**
  * Основной класс библиотеки, управляющий каталогом, читателями и операциями.
- * Stream API не используется.
  */
 public class Library {
 

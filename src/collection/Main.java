@@ -34,7 +34,7 @@ public class Main {
       library.addBook(new Book("Еще одна 1984", "Джордж Оруэлл", 1949, "978-0-452-28423-4", "Антиутопия"));
 
     } catch (LibraryException | IllegalArgumentException e) {
-      System.err.println("Ошибка при добавлении книги: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при добавлении книги: " + e.getMessage());
     }
 
     // --- 2. Вывод каталога ---
@@ -54,7 +54,7 @@ public class Main {
       System.out.println(library.getReader(reader2.getName()));
 
     } catch (LibraryException | IllegalArgumentException e) {
-      System.err.println("Ошибка при добавлении читателя: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при добавлении читателя: " + e.getMessage());
     }
 
     // --- 4. Поиск книг ---
@@ -90,7 +90,7 @@ public class Main {
       library.issueBook(reader2, book1984);
 
     } catch (LibraryException | IndexOutOfBoundsException e) {
-      System.err.println("Ошибка при выдаче книги: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при выдаче книги: " + e.getMessage());
     }
 
     // --- 6. Статистика и доступные книги ---
@@ -108,7 +108,7 @@ public class Main {
       library.returnBook(warAndPeace);
 
     } catch (LibraryException | IndexOutOfBoundsException e) {
-      System.err.println("Ошибка при возврате книги: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при возврате книги: " + e.getMessage());
     }
 
     library.printIssuedBooksStats();
@@ -134,7 +134,7 @@ public class Main {
       System.out.println("Извлечение из пустой обычной очереди: " + library.getNextBookFromQueue());
 
     } catch (LibraryException | IndexOutOfBoundsException e) {
-      System.err.println("Ошибка при работе с очередью: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при работе с очередью: " + e.getMessage());
     }
 
 
@@ -166,7 +166,7 @@ public class Main {
       Book masterMargarita = library.findBooksByAuthor("Михаил Булгаков").getFirst();
       library.removeBook(masterMargarita);
     } catch (LibraryException | IndexOutOfBoundsException e) {
-      System.err.println("Ошибка при удалении: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при удалении: " + e.getMessage());
     }
 
     try {
@@ -179,7 +179,7 @@ public class Main {
       library.removeBook(new Book("Несуществующая книга", "Автор", 2000, "000-0", "Жанр"));
 
     } catch (LibraryException | IndexOutOfBoundsException e) {
-      System.err.println("Ошибка при удалении: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка при удалении: " + e.getMessage());
     }
 
     // --- 13. Обработка граничных случаев ---
@@ -190,7 +190,7 @@ public class Main {
       System.out.println("Попытка выдать null книгу:");
       library.issueBook(reader1, null);
     } catch (LibraryException e) {
-      System.err.println("Ошибка: " + e.getMessage());
+      System.out.println("[ERROR] Ошибка: " + e.getMessage());
     }
     Library emptyLibrary = new Library();
     System.out.println("\nРабота с пустой библиотекой:");
@@ -201,7 +201,7 @@ public class Main {
 
       emptyLibrary.removeBook(new Book("Тест", "Тест", 2020, "111", "Тест"));
     } catch (LibraryException e) {
-      System.err.println("Попытка удаления из пустой библиотеки: " + e.getMessage());
+      System.out.println("[ERROR] Попытка удаления из пустой библиотеки: " + e.getMessage());
     }
 
     System.out.println("\n--- Демонстрация завершена ---");
