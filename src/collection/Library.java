@@ -303,7 +303,7 @@ public class Library {
       throw new LibraryException("Книга не найдена в каталоге.");
     }
     if (!currentlyIssuedBooks.containsKey(book)) {
-      System.out.println("Предупреждение: Книга '" + book.getTitle() + "' доступна, добавление в очередь ожидания не имеет смысла.");
+      throw new LibraryException("Книга '" + book.getTitle() + "' доступна, добавление в очередь ожидания не имеет смысла.");
     }
     waitingList.offer(book);
     System.out.println("Книга '" + book.getTitle() + "' добавлена в очередь ожидания.");

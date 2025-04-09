@@ -124,13 +124,12 @@ public class Main {
       System.out.println("Книга 'Мастер и Маргарита' в обычной очереди? " + library.isBookInQueue(masterMargarita));
       System.out.println("Книга 'Мастер и Маргарита' в приоритетной очереди? " + library.isBookInPriorityQueue(masterMargarita));
 
-      Book warAndPeace = library.findBooksByAuthor("Лев Толстой").getFirst();
-      System.out.println("\nПопытка добавить доступную книгу в очередь:");
-      library.addToWaitingList(warAndPeace);
+//      Book warAndPeace = library.findBooksByAuthor("Лев Толстой").getFirst();
+//      System.out.println("\nПопытка добавить доступную книгу в очередь:");
+//      library.addToWaitingList(warAndPeace);
 
       System.out.println("\nИзвлечение из приоритетной очереди: " + library.getNextBookFromPriorityQueue());
       System.out.println("Извлечение из обычной очереди: " + library.getNextBookFromQueue());
-      library.getNextBookFromQueue();
       System.out.println("Извлечение из пустой обычной очереди: " + library.getNextBookFromQueue());
 
     } catch (LibraryException | IndexOutOfBoundsException e) {
@@ -142,7 +141,7 @@ public class Main {
     library.printUniqueAuthors();
 
     // --- 10. Получение популярных книг ---
-    System.out.println("\n--- Популярные книги (были в очередях) ---");
+    System.out.println("\n--- Популярные книги (в очередях) ---");
     List<Book> popular = library.getPopularBooks();
     if (popular.isEmpty()) {
       System.out.println("Нет книг в очередях ожидания.");
